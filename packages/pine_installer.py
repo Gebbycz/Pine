@@ -1074,11 +1074,8 @@ class PineInstaller:
             f.write("""
 import sys
 import os
-
 sys.path.insert(0, os.path.dirname(__file__))
-
 from pine_runtime import PineRuntime
-
 if __name__ == "__main__":
     runtime = PineRuntime()
     if len(sys.argv) > 1:
@@ -1087,26 +1084,42 @@ if __name__ == "__main__":
         runtime.run_interactive()
 """)
         
-        runtime = self.install_path / "pine_runtime.py"
-        with open(runtime, 'w') as f:
-            f.write("""
+        # Create full runtime with all commands
+        runtime_code = '''
 import sys
 import os
+import json
+import shutil
+import platform
+import subprocess
 from pathlib import Path
+import math
+import random
+import base64
+import hashlib
+import secrets
+import datetime
+import time
 
 class PineRuntime:
     def __init__(self):
         self.variables = {}
         self.install_path = Path(__file__).parent
-        
+        self.commands = self.load_commands()
+    
+    def load_commands(self):
+        commands_file = self.install_path / "commands.json"
+        if commands_file.exists():
+            with open(commands_file, 'r') as f:
+                return json.load(f)
+        return []
+    
     def run_file(self, filename):
         if not os.path.exists(filename):
             print(f"Error: File '{filename}' not found")
             return
-        
         with open(filename, 'r') as f:
             lines = f.readlines()
-        
         for line in lines:
             line = line.strip()
             if line and not line.startswith('#'):
@@ -1116,21 +1129,287 @@ class PineRuntime:
         parts = line.split()
         if not parts:
             return
-        
         command = parts[0]
         args = parts[1:]
-        
         args = [self.variables.get(arg, arg) for arg in args]
         
-        if hasattr(self, f'cmd_{command}'):
-            getattr(self, f'cmd_{command}')(args)
+        # Basic I/O
+        if command in ["display", "show", "exec_t", "exec.t", "exec_result", "exec_write", "write", "tell"]:
+            print(" ".join(args))
+        elif command in ["input_exec", "get_exec", "read_input", "ask_user", "prompt", "get_value", "read_line"]:
+            return input(" ".join(args) if args else "> ")
+        elif command in ["input_number", "get_number", "read_number"]:
+            return float(input(" ".join(args) if args else "Enter number: "))
+        elif command in ["print_number", "display_number"]:
+            print(float(args[0]) if args else 0)
+        
+        # Variables
+        elif command in ["Pset", "Passign", "Plet", "define", "exec_save", "save_var"]:
+            if len(args) > 1:
+                self.variables[args[0]] = " ".join(args[1:])
+        elif command in ["get_var", "fetch_var", "retrieve"]:
+            if args:
+                print(self.variables.get(args[0], ""))
+        elif command in ["rm_var", "clear_var", "del_var"]:
+            if args:
+                self.variables.pop(args[0], None)
+        elif command in ["list_vars", "show_vars", "display_vars"]:
+            print(self.variables)
+        elif command in ["check_var", "var_exists", "is_defined"]:
+            print(args[0] in self.variables if args else False)
+        elif command in ["type_of", "get_type"]:
+            print(type(self.variables.get(args[0], "")).__name__)
+        elif command == "increment":
+            self.variables[args[0]] = str(int(self.variables.get(args[0], 0)) + 1)
+        elif command == "decrement":
+            self.variables[args[0]] = str(int(self.variables.get(args[0], 0)) - 1)
+        elif command == "add_to":
+            self.variables[args[0]] = str(float(self.variables.get(args[0], 0)) + float(args[1]))
+        elif command == "subtract_from":
+            self.variables[args[0]] = str(float(self.variables.get(args[0], 0)) - float(args[1]))
+        elif command == "multiply_by":
+            self.variables[args[0]] = str(float(self.variables.get(args[0], 0)) * float(args[1]))
+        elif command == "divide_by":
+            self.variables[args[0]] = str(float(self.variables.get(args[0], 0)) / float(args[1]))
+        elif command == "modulo":
+            self.variables[args[0]] = str(int(self.variables.get(args[0], 0)) % int(args[1]))
+        elif command == "power":
+            self.variables[args[0]] = str(float(self.variables.get(args[0], 0)) ** float(args[1]))
+        elif command in ["concat", "append_text"]:
+            self.variables[args[0]] = self.variables.get(args[0], "") + " ".join(args[1:])
+        
+        # Math
+        elif command in ["sub_add", "exec_sum", "plus", "add", "sum"]:
+            print(sum(map(float, args)))
+        elif command in ["subtract", "minus", "exec_difference"]:
+            print(float(args[0]) - float(args[1]) if len(args) > 1 else 0)
+        elif command in ["multiply", "times", "product"]:
+            result = 1
+            for a in args:
+                result *= float(a)
+            print(result)
+        elif command in ["divide", "quotient"]:
+            print(float(args[0]) / float(args[1]) if len(args) > 1 else 0)
+        elif command in ["mod", "remainder"]:
+            print(int(args[0]) % int(args[1]) if len(args) > 1 else 0)
+        elif command in ["pf", "exponent", "power_of"]:
+            print(float(args[0]) ** float(args[1]) if len(args) > 1 else 0)
+        elif command in ["sr", "sqrt", "square_root"]:
+            print(float(args[0]) ** 0.5 if args else 0)
+        elif command in ["ct", "cube_root"]:
+            print(float(args[0]) ** (1/3) if args else 0)
+        elif command in ["absolute", "abs_value"]:
+            print(abs(float(args[0])) if args else 0)
+        elif command == "round_number":
+            print(round(float(args[0])) if args else 0)
+        elif command == "floor":
+            print(int(float(args[0])) if args else 0)
+        elif command == "ceiling":
+            print(int(float(args[0])) + 1 if args and float(args[0]) > int(float(args[0])) else int(float(args[0])) if args else 0)
+        elif command in ["min_value", "min"]:
+            print(min(map(float, args)))
+        elif command in ["max_value", "max"]:
+            print(max(map(float, args)))
+        elif command in ["average", "mean"]:
+            print(sum(map(float, args)) / len(args) if args else 0)
+        elif command == "median":
+            print(sorted(map(float, args))[len(args)//2] if args else 0)
+        elif command == "factorial":
+            n = int(args[0]) if args else 0
+            result = 1
+            for i in range(1, n+1):
+                result *= i
+            print(result)
+        elif command == "gcd":
+            a, b = int(args[0]), int(args[1])
+            while b:
+                a, b = b, a % b
+            print(a)
+        elif command == "lcm":
+            a, b = int(args[0]), int(args[1])
+            print(abs(a*b) // math.gcd(a, b) if a and b else 0)
+        elif command in ["is_prime", "prime_check"]:
+            n = int(args[0]) if args else 0
+            if n < 2:
+                print(False)
+            else:
+                print(all(n % i != 0 for i in range(2, int(n**0.5)+1)))
+        elif command in ["is_even", "even_check"]:
+            print(int(args[0]) % 2 == 0 if args else False)
+        elif command in ["is_odd", "odd_check"]:
+            print(int(args[0]) % 2 != 0 if args else False)
+        elif command == "sin":
+            print(math.sin(float(args[0])))
+        elif command == "cos":
+            print(math.cos(float(args[0])))
+        elif command == "tan":
+            print(math.tan(float(args[0])))
+        elif command == "log":
+            print(math.log(float(args[0])))
+        elif command == "log10":
+            print(math.log10(float(args[0])))
+        elif command == "exp":
+            print(math.exp(float(args[0])))
+        elif command == "degrees":
+            print(math.degrees(float(args[0])))
+        elif command == "radians":
+            print(math.radians(float(args[0])))
+        elif command == "pi_value":
+            print(math.pi)
+        elif command == "e_value":
+            print(math.e)
+        elif command == "random_number":
+            print(random.random())
+        elif command in ["random_int", "random_range"]:
+            print(random.randint(int(args[0]), int(args[1])))
+        elif command == "seed_random":
+            random.seed(int(args[0]))
+        
+        # String operations
+        elif command in ["string_length", "length", "str_len"]:
+            print(len(args[0]) if args else 0)
+        elif command in ["uppercase", "to_upper"]:
+            print(args[0].upper() if args else "")
+        elif command in ["lowercase", "to_lower"]:
+            print(args[0].lower() if args else "")
+        elif command == "capitalize":
+            print(args[0].capitalize() if args else "")
+        elif command == "title_case":
+            print(args[0].title() if args else "")
+        elif command in ["reverse_string", "reverse"]:
+            print(args[0][::-1] if args else "")
+        elif command in ["trim", "strip"]:
+            print(args[0].strip() if args else "")
+        elif command == "trim_left":
+            print(args[0].lstrip() if args else "")
+        elif command == "trim_right":
+            print(args[0].rstrip() if args else "")
+        elif command in ["replace_text", "replace"]:
+            print(args[0].replace(args[1], args[2]) if len(args) > 2 else "")
+        elif command in ["substring", "substr"]:
+            print(args[0][int(args[1]):int(args[2])] if len(args) > 2 else "")
+        elif command in ["split_string", "split"]:
+            print(args[0].split(args[1] if len(args) > 1 else " ") if args else [])
+        elif command in ["join_strings", "join"]:
+            print(args[0].join(args[1:]) if args else "")
+        elif command in ["contains_text", "contains"]:
+            print(args[1] in args[0] if len(args) > 1 else False)
+        elif command == "starts_with":
+            print(args[0].startswith(args[1]) if len(args) > 1 else False)
+        elif command == "ends_with":
+            print(args[0].endswith(args[1]) if len(args) > 1 else False)
+        elif command in ["count_char", "count"]:
+            print(args[0].count(args[1]) if len(args) > 1 else 0)
+        elif command == "is_digit":
+            print(args[0].isdigit() if args else False)
+        elif command == "is_alpha":
+            print(args[0].isalpha() if args else False)
+        elif command == "is_alphanumeric":
+            print(args[0].isalnum() if args else False)
+        elif command == "is_space":
+            print(args[0].isspace() if args else False)
+        elif command == "is_upper":
+            print(args[0].isupper() if args else False)
+        elif command == "is_lower":
+            print(args[0].islower() if args else False)
+        elif command in ["repeat_string", "repeat"]:
+            print(args[0] * int(args[1]) if len(args) > 1 else "")
+        elif command == "base64en":
+            print(base64.b64encode(args[0].encode()).decode() if args else "")
+        elif command == "base64de":
+            print(base64.b64decode(args[0].encode()).decode() if args else "")
+        
+        # Lists
+        elif command in ["create_list", "make_list"]:
+            print(args)
+        elif command == "list_length":
+            print(len(args))
+        elif command in ["list_sort", "sort_list"]:
+            print(sorted(args))
+        elif command in ["list_reverse", "reverse_list"]:
+            print(args[::-1])
+        elif command == "list_first":
+            print(args[0] if args else None)
+        elif command == "list_last":
+            print(args[-1] if args else None)
+        elif command == "list_min":
+            print(min(args))
+        elif command == "list_max":
+            print(max(args))
+        elif command == "list_sum":
+            print(sum(map(float, args)))
+        elif command == "list_average":
+            print(sum(map(float, args)) / len(args) if args else 0)
+        elif command in ["list_join", "join_list"]:
+            print(" ".join(args))
+        elif command in ["list_unique", "unique_items"]:
+            print(list(set(args)))
+        
+        # System
+        elif command in ["sysfo", "exec_os"]:
+            print(platform.system())
+        elif command == "python_version":
+            print(sys.version)
+        elif command in ["run_command", "exec_command", "shell_command", "system_command", "terminal", "command_line"]:
+            print(os.popen(" ".join(args)).read())
+        elif command in ["get_env"]:
+            print(os.environ.get(args[0], "") if args else "")
+        elif command == "process_id":
+            print(os.getpid())
+        elif command == "cpu_count":
+            print(os.cpu_count())
+        elif command in ["hostname", "network_name"]:
+            print(platform.node())
+        elif command in ["sleep", "wait", "delay"]:
+            time.sleep(float(args[0]) if args else 1)
+        elif command == "pause":
+            input("Press Enter to continue...")
+        elif command in ["clear_screen", "cls", "clear"]:
+            os.system('cls' if os.name == 'nt' else 'clear')
+        
+        # Date/Time
+        elif command == "current_time":
+            print(datetime.datetime.now().strftime("%H:%M:%S"))
+        elif command == "current_date":
+            print(datetime.datetime.now().strftime("%Y-%m-%d"))
+        elif command == "current_datetime":
+            print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        elif command == "now":
+            print(datetime.datetime.now())
+        elif command in ["timestamp", "epoch_time"]:
+            print(int(time.time()))
+        elif command == "year":
+            print(datetime.datetime.now().year)
+        elif command == "month":
+            print(datetime.datetime.now().month)
+        elif command == "day":
+            print(datetime.datetime.now().day)
+        elif command == "hour":
+            print(datetime.datetime.now().hour)
+        elif command == "minute":
+            print(datetime.datetime.now().minute)
+        elif command == "second":
+            print(datetime.datetime.now().second)
+        
+        # Utility
+        elif command == "help":
+            print(f"Pine Language - {len(self.commands)} commands loaded")
+            print("Categories: I/O, Variables, Math, String, List, File, System, Network, Database, Date/Time, GUI, Image, Utility")
+        elif command == "version":
+            print("Pine Language v1.0")
+        elif command == "generate_id":
+            import uuid
+            print(uuid.uuid4())
+        elif command in ["exit", "quit", "terminate", "exit_program", "shutdown_pine"]:
+            sys.exit(0)
+        
         else:
             print(f"Unknown command: {command}")
     
     def run_interactive(self):
         print("Pine Language Interactive Mode")
+        print(f"{len(self.commands)} commands loaded")
         print("Type 'exit' to quit")
-        
         while True:
             try:
                 line = input("pine> ").strip()
@@ -1143,43 +1422,21 @@ class PineRuntime:
                 break
             except Exception as e:
                 print(f"Error: {e}")
-    
-    def cmd_display(self, args):
-        print(" ".join(args))
-    
-    def cmd_show(self, args):
-        print(" ".join(args))
-    
-    def cmd_input_text(self, args):
-        return input(" ".join(args) if args else "Enter input: ")
-    
-    def cmd_Pset(self, args):
-        if len(args) > 1:
-            self.variables[args[0]] = " ".join(args[1:])
-    
-    def cmd_get_var(self, args):
-        if args:
-            print(self.variables.get(args[0], ""))
-    
-    def cmd_sub_add(self, args):
-        print(sum(map(float, args)))
-    
-    def cmd_help(self, args):
-        print("Available commands:")
-        print("display, show, input_text, Pset, get_var, sub_add")
-        print("Type 'exit' to quit")
-""")
+'''
+        
+        runtime = self.install_path / "pine_runtime.py"
+        with open(runtime, 'w') as f:
+            f.write(runtime_code)
         
         if self.system == "Windows":
             self.create_windows_association()
-        
-        if self.system == "Windows":
             self.create_desktop_shortcut()
         
         self.add_to_path()
         
         print(f"Pine Language installed successfully to {self.install_path}")
-        print("You can now create .pine files and run them!")
+        print(f"{len(self.pine_commands)} commands available")
+        print("You can now create .pi files and run them!")
         
     def create_windows_association(self):
         try:
