@@ -4,6 +4,8 @@
 
 Pine is a simple, easy-to-learn programming language with over 500 built-in commands. It uses the `.pi` file extension and runs on Windows, macOS, and Linux.
 
+<img width="2559" height="1439" alt="image" src="https://github.com/user-attachments/assets/092640b3-9358-4a38-ba82-a335cb3096ee" />
+
 
 
 ## Installation
