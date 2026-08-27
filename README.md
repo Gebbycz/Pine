@@ -30,3 +30,5 @@ Pine is a simple, easy-to-learn programming language with over 500 built-in comm
 
 8. Click "OK"
 
+To run Pine terminal open cmd and run 
+python "C:\Users\%USERNAME%\AppData\Local\Pine\pine.py"
