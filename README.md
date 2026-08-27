@@ -24,7 +24,7 @@ Pine is a simple, easy-to-learn programming language with over 500 built-in comm
 
 5. Navigate to your Pine Install folder → `packages` folder
 
-6. Select `run\_pi.bat`
+6. Select `run_pi.bat`
 
 7. Check "Always use this app to open .pi files"
 
