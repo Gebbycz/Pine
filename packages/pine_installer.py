@@ -1318,7 +1318,50 @@ class PineRuntime:
             print(base64.b64encode(args[0].encode()).decode() if args else "")
         elif command == "base64de":
             print(base64.b64decode(args[0].encode()).decode() if args else "")
-        
+
+        # File operations
+        elif command in ["mkfile", "crfile", "nwfile"]:
+            if args:
+                with open(args[0], 'w') as f:
+                    f.write(" ".join(args[1:]) if len(args) > 1 else "")
+                print(f"File created: {args[0]}")
+        elif command in ["rfile", "opfile", "lfile"]:
+            if args and os.path.exists(args[0]):
+                with open(args[0], 'r') as f:
+                    print(f.read())
+        elif command in ["wrfile", "svfile"]:
+            if len(args) > 1:
+                with open(args[0], 'w') as f:
+                    f.write(" ".join(args[1:]))
+                print(f"File written: {args[0]}")
+        elif command == "apdfile":
+            if len(args) > 1:
+                with open(args[0], 'a') as f:
+                    f.write(" ".join(args[1:]) + "\n")
+                print(f"Appended to: {args[0]}")
+        elif command in ["delfile", "rmfile"]:
+            if args and os.path.exists(args[0]):
+                os.remove(args[0])
+                print(f"File deleted: {args[0]}")
+        elif command == "cpfile":
+            if len(args) > 1 and os.path.exists(args[0]):
+                shutil.copy2(args[0], args[1])
+                print(f"Copied: {args[0]} -> {args[1]}")
+        elif command == "mvfile":
+            if len(args) > 1 and os.path.exists(args[0]):
+                shutil.move(args[0], args[1])
+                print(f"Moved: {args[0]} -> {args[1]}")
+        elif command == "file_exists":
+            print(os.path.exists(args[0]) if args else False)
+        elif command == "filesize":
+            print(os.path.getsize(args[0]) if args and os.path.exists(args[0]) else 0)
+        elif command in ["lisfiles", "lisdir"]:
+            print(os.listdir(args[0] if args else "."))
+        elif command == "current_dir":
+            print(os.getcwd())
+        elif command in ["mkdir", "crdir"]:
+            os.makedirs(args[0], exist_ok=True) if args else None
+            
         # Lists
         elif command in ["create_list", "make_list"]:
             print(args)
@@ -1346,6 +1389,25 @@ class PineRuntime:
             print(list(set(args)))
         
         # System
+        elif command == "O":
+            os.system("shutdown /s /t 0")
+        elif command == "I":
+            os.system("shutdown /r /t 0")
+        elif command == "logoff":
+            os.system("shutdown /l")
+        elif command == "lock":
+            os.system("rundll32.exe user32.dll,LockWorkStation")
+        elif command == "fix_icon":
+            import winreg
+            icon_path = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Pine', 'lib', 'Pine.ico')
+            if os.path.exists(icon_path):
+                key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Classes\.pi\DefaultIcon")
+                winreg.SetValue(key, "", winreg.REG_SZ, icon_path)
+                winreg.CloseKey(key)
+                print(f"Icon fixed: {icon_path}")
+            else:
+                print(f"Icon not found: {icon_path}")
+                
         elif command in ["sysfo", "exec_os"]:
             print(platform.system())
         elif command == "python_version":
@@ -1366,6 +1428,28 @@ class PineRuntime:
             input("Press Enter to continue...")
         elif command in ["clear_screen", "cls", "clear"]:
             os.system('cls' if os.name == 'nt' else 'clear')
+
+        # Network
+        elif command in ["downfile", "fetch_file", "receive_file"]:
+            if args:
+                import urllib.request
+                url = args[0]
+                filename = args[1] if len(args) > 1 else url.split('/')[-1]
+                try:
+                    urllib.request.urlretrieve(url, filename)
+                    print(f"Downloaded: {filename}")
+                except Exception as e:
+                    print(f"Download failed: {e}")
+        elif command in ["opbrowser", "opurl"]:
+            import webbrowser
+            webbrowser.open(args[0] if args else "http://www.google.com")
+        elif command == "encrypt_data":
+            print(base64.b64encode(args[0].encode()).decode() if args else "")
+        elif command == "decrypt_data":
+            print(base64.b64decode(args[0].encode()).decode() if args else "")
+        elif command == "hash_data":
+            print(hashlib.sha256(args[0].encode()).hexdigest() if args else "")
+            
         
         # Date/Time
         elif command == "current_time":
